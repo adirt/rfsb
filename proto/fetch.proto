@@ -1,0 +1,16 @@
+// Copyright © 2019 Adir Tzuberi <adir85@gmail.com>
+syntax = "proto3";
+
+message FetchRequest {
+    repeated string dirs = 1;
+    repeated string filenames = 2;
+}
+
+message FetchResponse {
+    string filename = 1;
+    uint64 filesize = 2;
+    bytes file = 3;
+    uint32 part = 4;
+    uint32 parts = 5;
+    string md5 = 6;
+}

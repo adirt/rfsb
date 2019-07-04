@@ -1,0 +1,11 @@
+// Copyright © 2019 Adir Tzuberi <adir85@gmail.com>
+syntax = "proto3";
+
+message BrowseRequest {
+    string dir = 1;
+}
+
+message BrowseResponse {
+    repeated string dirs = 1;
+    repeated string filenames = 2;
+}

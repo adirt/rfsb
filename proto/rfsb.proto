@@ -1,0 +1,10 @@
+// Copyright © 2019 Adir Tzuberi <adir85@gmail.com>
+syntax = "proto3";
+
+import "browse.proto";
+import "fetch.proto";
+
+service RemoteFileSystemBrowser {
+    rpc Browse(BrowseRequest) returns (BrowseResponse);
+    rpc Fetch(FetchRequest) returns (stream FetchResponse);
+}
