@@ -13,3 +13,6 @@
 
 # Goland configuration files
 .idea/
+
+# Compiled protocol buffer files
+*.pb.go

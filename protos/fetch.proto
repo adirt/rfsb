@@ -1,5 +1,6 @@
 // Copyright © 2019 Adir Tzuberi <adir85@gmail.com>
 syntax = "proto3";
+package proto;
 
 message FetchRequest {
     repeated string dirs = 1;
