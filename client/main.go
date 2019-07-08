@@ -21,7 +21,7 @@ func main() {
 	client := pb.NewRemoteFileSystemBrowserClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	response, err := client.Browse(ctx, &pb.BrowseRequest{Dir: "Go Rules"})
+	response, err := client.Browse(ctx, &pb.BrowseRequest{Dir: "Projects/rust/sopcast/target/debug"})
 	if err != nil {
 		log.Fatalf("failed to get browse response: %v", err)
 	}

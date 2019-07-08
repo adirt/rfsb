@@ -4,15 +4,10 @@ package main
 import (
 	"github.com/adirt/rfsb/server/server"
 	"log"
-	"os/user"
 )
 
 func main() {
-	currentUser, err := user.Current()
-	if err != nil {
-		log.Fatalf("failed to get home directory: %v", err)
-	}
-	rfsbServer, err := server.NewServer(currentUser.HomeDir)
+	rfsbServer, err := server.NewServer()
 	if err != nil {
 		log.Fatalf("failed to initialize server: %v", err)
 	}

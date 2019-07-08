@@ -10,7 +10,6 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"net"
-	"os"
 )
 
 const (
@@ -18,7 +17,8 @@ const (
 )
 
 type rfsbServer struct {
-	rootDir string
+	browser *handlers.Browser
+	fetcher *handlers.Fetcher
 }
 
 // type pbMessage interface {
@@ -32,13 +32,16 @@ type rfsbServer struct {
 // 	HandleRequest() *pbMessage
 // }
 
-func NewServer(rootDir string) (*rfsbServer, error) {
-	server := &rfsbServer{}
-	if err := os.Chdir(rootDir); err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to switch to root directory at %s: %v\n", rootDir, err))
+func NewServer() (*rfsbServer, error) {
+	browser, err := handlers.CreateBrowser()
+	if err != nil {
+		log.Fatalf("failed to initialize browse handler: %v", err)
 	}
-	server.rootDir = rootDir
-	return server, nil
+	fetcher, err := handlers.CreateFetcher()
+	if err != nil {
+		log.Fatalf("failed to initialize fetch handler: %v", err)
+	}
+	return &rfsbServer{browser: browser, fetcher: fetcher}, nil
 }
 
 func (s *rfsbServer) Serve() error {
@@ -54,10 +57,9 @@ func (s *rfsbServer) Serve() error {
 	return nil
 }
 
-func (s *rfsbServer) Browse(context context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
-	log.Printf("Received browse request for %s/%s", s.rootDir, request.Dir)
-	browser := handlers.Browser{}
-	response, err := browser.HandleRequest(request)
+func (s *rfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
+	log.Printf("Received browse request for %s", request.Dir)
+	response, err := s.browser.HandleRequest(request)
 	if err != nil {
 		return nil, err
 	}
@@ -66,8 +68,7 @@ func (s *rfsbServer) Browse(context context.Context, request *pb.BrowseRequest) 
 
 func (s *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
 	log.Printf("Received fetch request")
-	fetcher := handlers.Fetcher{}
-	response, err := fetcher.HandleRequest(request)
+	response, err := s.fetcher.HandleRequest(request)
 	if err != nil {
 		return err
 	}
