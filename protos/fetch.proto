@@ -8,10 +8,10 @@ message FetchRequest {
 }
 
 message FetchResponse {
-    string filename = 1;
-    uint64 filesize = 2;
-    bytes file = 3;
-    uint32 part = 4;
-    uint32 parts = 5;
+    string name = 1;
+    uint64 size = 2;
+    bytes data = 3;
+    uint64 part = 4;
+    uint64 parts = 5;
     string md5 = 6;
 }

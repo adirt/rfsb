@@ -68,10 +68,23 @@ func (s *rfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb
 
 func (s *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
 	log.Printf("Received fetch request")
-	response, err := s.fetcher.HandleRequest(request)
-	if err != nil {
-		return err
+	streamChannel := make(chan *pb.FetchResponse)
+	// responses, err := s.fetcher.HandleRequest(request, streamChannel)
+	//if err != nil {
+	//	return err
+	//}
+	go s.fetcher.HandleRequest(request, streamChannel)
+	// if false {
+	// 	for _, response := range responses {
+	// 		if err := stream.Send(response); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
+	for fileChunk := range streamChannel {
+		if err := stream.Send(fileChunk); err != nil {
+			return err
+		}
 	}
-	log.Println(response)
 	return nil
 }

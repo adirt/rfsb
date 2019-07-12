@@ -22,14 +22,15 @@ func CreateBrowser() (*Browser, error) {
 	return browser, nil
 }
 
-func (b Browser) HandleRequest(request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
+func (b *Browser) HandleRequest(request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
 	if dirExists, err := b.pathExists(request.Dir, DIR); err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to validate request dir '%s': %v", request.Dir, err))
 	} else if !dirExists {
 		return nil, errors.New(fmt.Sprintf("request dir '%s' doesn't exist", request.Dir))
 	}
 
-	dirList, err := ioutil.ReadDir(path.Join(b.rootDir, request.Dir))
+	requestDirAbsPath := path.Join(b.rootDir, request.Dir)
+	dirList, err := ioutil.ReadDir(requestDirAbsPath)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to read request dir '%s': %v", request.Dir, err))
 	}

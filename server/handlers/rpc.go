@@ -37,7 +37,7 @@ func createRpcHandler() (*rpcHandler, error) {
 	return rh, nil
 }
 
-func (rh rpcHandler) pathExists(path string, resourceType resourceType) (bool, error) {
+func (rh *rpcHandler) pathExists(path string, resourceType resourceType) (bool, error) {
 	absolutePath := pathpkg.Join(rh.rootDir, path)
 	stat, err := os.Stat(absolutePath)
 	if err != nil {
