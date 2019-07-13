@@ -4,8 +4,6 @@ package handlers
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	pb "github.com/adirt/rfsb/protos"
 	"log"
 	"os"
@@ -32,69 +30,75 @@ func CreateFetcher() (*Fetcher, error) {
 	return fetcher, nil
 }
 
-func (f *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb.FetchResponse) { //([]*pb.FetchResponse, error) {
-	responses := make([]*pb.FetchResponse, 0, len(request.Filenames))
+func (f *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb.FetchResponse) {
 	for idx, filename := range request.Filenames {
-		log.Printf("Reading file #%d: %s", idx + 1, filename)
-		if exists, err := f.pathExists(filename, FILE); !exists {
-			if err != nil {
-				log.Printf("can't process '%s': %s", filename, err.Error())
-			} else {
-				log.Printf("file not found: '%s'", filename)
+		go func(idx int, filename string) {
+			log.Printf("Reading file #%d: %s", idx+1, filename)
+			if exists, err := f.pathExists(filename, FILE); !exists {
+				if err != nil {
+					log.Printf("can't process '%s': %s", filename, err.Error())
+					return
+					// TODO: Proper logging and error handling everywhere
+				} else {
+					log.Printf("file not found: '%s'", filename)
+					return
+				}
 			}
-		}
-		fileChunkResponses, err := f.readFile(path.Join(f.rootDir, filename), streamChannel)
-		if false {
-			if err != nil {
-				log.Printf("failed to read file '%s': %s", filename, err.Error())
-			}
-			responses = append(responses, fileChunkResponses...)
-		}
+			streamFile(path.Join(f.rootDir, filename), streamChannel)
+		}(idx, filename)
+
+		time.Sleep(5 * time.Second) // TODO: learn how to use goroutines with channels for real
+		close(streamChannel)
 	}
-	// return responses, nil
 }
 
-func (f *Fetcher) readFile(filename string, streamChannel chan *pb.FetchResponse) (fileChunkResponses []*pb.FetchResponse, err error) {
-	fileInfo, err := os.Stat(filename)
+func streamFile(filename string, streamChannel chan *pb.FetchResponse) {
+	file, fileSize, err := prepareFile(filename)
 	if err != nil {
-		return
-	}
-	file, err := os.Open(filename)
-	if err != nil {
+		log.Printf("failed to open file '%s': %s", filename, err.Error())
 		return
 	}
 	defer file.Close()
 
-	fileSize := uint64(fileInfo.Size())
 	chunkCount := calculateChunkCount(fileSize)
 	hash := md5.New()
-	var buffer chunkBuffer
 	for chunkIdx := uint64(1); chunkIdx <= chunkCount; chunkIdx++ {
-		bytesRead, err := file.Read(buffer[:chunkSize])
+		var buffer chunkBuffer
+		bytesRead, err := file.Read(buffer[:])
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("failed to read chunk %d of '%s': %s", chunkIdx, filename, err.Error()))
+			log.Printf("failed to read chunk %d of '%s': %s", chunkIdx, filename, err.Error())
+			return
 		}
+
 		hash.Write(buffer[:bytesRead])
 		fileChunkResponse := &pb.FetchResponse{
-			Name: filename,
-			Size: fileSize,
-			Data: buffer[:bytesRead],
-			Part: chunkIdx,
+			Name:  filename,
+			Size:  fileSize,
+			Data:  buffer[:bytesRead],
+			Part:  chunkIdx,
 			Parts: chunkCount,
 		}
 		if chunkIdx == chunkCount {
 			fileChunkResponse.Md5 = hex.EncodeToString(hash.Sum(nil))
 		}
+
 		streamChannel <- fileChunkResponse
-		time.Sleep(1 * time.Second)
 	}
-	close(streamChannel)
+}
+
+func prepareFile(filename string) (file *os.File, fileSize uint64, err error) {
+	fileInfo, err := os.Stat(filename)
+	if err != nil {
+		return
+	}
+	fileSize = uint64(fileInfo.Size())
+	file, err = os.Open(filename)
 	return
 }
 
 func calculateChunkCount(fileSize uint64) (chunkCount uint64) {
 	chunkCount = fileSize / chunkSize
-	if fileSize % chunkSize > 0 {
+	if fileSize%chunkSize > 0 {
 		chunkCount++
 	}
 	return

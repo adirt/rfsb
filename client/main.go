@@ -23,7 +23,7 @@ func main() {
 	client := pb.NewRemoteFileSystemBrowserClient(conn)
 
 	// Test Browse
-	timedCtx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	timedCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	response, err := client.Browse(timedCtx, &pb.BrowseRequest{Dir: "Projects/rust/sopcast/target/debug"})
@@ -35,13 +35,13 @@ func main() {
 		strings.Join(response.Filenames, ", "))
 
 	// Test Fetch
-    fetchClient, err := client.Fetch(context.Background(), &pb.FetchRequest{Filenames: []string{"Games/Mednafen/Genesis/Road Rash 3 (UEJ) [!].zip"}})
-    if err != nil {
-    	log.Fatalf("failed to get fetch client: %v", err)
-    }
-    var incomingData []byte
+	fetchClient, err := client.Fetch(context.Background(), &pb.FetchRequest{Filenames: []string{"Games/Mednafen/Genesis/Road Rash 3 (UEJ) [!].zip"}})
+	if err != nil {
+		log.Fatalf("failed to get fetch client: %v", err)
+	}
+	var incomingData []byte
 	hash := md5.New()
-    for {
+	for {
 		response, err := fetchClient.Recv()
 		if err != nil {
 			log.Fatalf("failed to get fetch response: %v", err)

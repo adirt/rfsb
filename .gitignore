@@ -16,3 +16,6 @@
 
 # Compiled protocol buffer files
 *.pb.go
+
+# Debug scripts
+debug/
