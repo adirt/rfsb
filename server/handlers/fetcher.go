@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"time"
 )
 
 const (
@@ -54,8 +55,6 @@ func (f *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb
 }
 
 func (f *Fetcher) readFile(filename string, streamChannel chan *pb.FetchResponse) (fileChunkResponses []*pb.FetchResponse, err error) {
-	// TODO: find out why the chunk bytes are identical for every chunk.
-	// TODO: same buffer? maybe sending to the stream immediately will fix the prob.
 	fileInfo, err := os.Stat(filename)
 	if err != nil {
 		return
@@ -71,23 +70,23 @@ func (f *Fetcher) readFile(filename string, streamChannel chan *pb.FetchResponse
 	hash := md5.New()
 	var buffer chunkBuffer
 	for chunkIdx := uint64(1); chunkIdx <= chunkCount; chunkIdx++ {
-		bytesRead, err := file.Read(buffer[0:chunkSize])
+		bytesRead, err := file.Read(buffer[:chunkSize])
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("failed to read chunk %d of '%s': %s", chunkIdx, filename, err.Error()))
 		}
-		hash.Write(buffer[0:bytesRead])
+		hash.Write(buffer[:bytesRead])
 		fileChunkResponse := &pb.FetchResponse{
 			Name: filename,
 			Size: fileSize,
-			Data: buffer[:],
+			Data: buffer[:bytesRead],
 			Part: chunkIdx,
 			Parts: chunkCount,
 		}
 		if chunkIdx == chunkCount {
 			fileChunkResponse.Md5 = hex.EncodeToString(hash.Sum(nil))
 		}
-		// fileChunkResponses = append(fileChunkResponses, fileChunkResponse)
 		streamChannel <- fileChunkResponse
+		time.Sleep(1 * time.Second)
 	}
 	close(streamChannel)
 	return

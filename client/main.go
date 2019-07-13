@@ -40,7 +40,6 @@ func main() {
     	log.Fatalf("failed to get fetch client: %v", err)
     }
     var incomingData []byte
-	var hashBuffer [64 * 1024]byte
 	hash := md5.New()
     for {
 		response, err := fetchClient.Recv()
@@ -53,9 +52,10 @@ func main() {
 		fmt.Println("Part:", response.Part)
 		fmt.Println("Total parts:", response.Parts)
 		fmt.Println("MD5:", response.Md5)
+		fmt.Println("Length of Data:", len(response.Data))
 		fmt.Println("Data:", response.Data)
 		incomingData = append(incomingData, response.Data...)
-		hash.Write(hashBuffer[0:len(response.Data)])
+		hash.Write(response.Data)
 		if response.Part == response.Parts {
 			clientCalculatedMd5 := hex.EncodeToString(hash.Sum(nil))
 			fmt.Printf("Server MD5: %s\nClient MD5: %s\n", response.Md5, clientCalculatedMd5)
