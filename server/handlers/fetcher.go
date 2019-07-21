@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"time"
 )
 
 const (
@@ -22,19 +21,22 @@ type Fetcher struct {
 }
 
 func CreateFetcher() (*Fetcher, error) {
-	fetcher := &Fetcher{}
+	fetcher := Fetcher{}
 	var err error
 	if fetcher.rpcHandler, err = createRpcHandler(); err != nil {
 		return nil, err
 	}
-	return fetcher, nil
+	return &fetcher, nil
 }
 
-func (f *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb.FetchResponse) {
+func (this *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb.FetchResponse, fileCountChannel chan int, doneChannel chan bool) {
+	fileCountChannel <- len(request.Filenames)
+
 	for idx, filename := range request.Filenames {
 		go func(idx int, filename string) {
 			log.Printf("Reading file #%d: %s", idx+1, filename)
-			if exists, err := f.pathExists(filename, FILE); !exists {
+			if exists, err := this.pathExists(filename, FILE); !exists {
+				fileCountChannel <- -1
 				if err != nil {
 					log.Printf("can't process '%s': %s", filename, err.Error())
 					return
@@ -44,11 +46,16 @@ func (f *Fetcher) HandleRequest(request *pb.FetchRequest, streamChannel chan *pb
 					return
 				}
 			}
-			streamFile(path.Join(f.rootDir, filename), streamChannel)
-		}(idx, filename)
 
-		time.Sleep(5 * time.Second) // TODO: learn how to use goroutines with channels for real
+			streamFile(path.Join(this.rootDir, filename), streamChannel)
+			fileCountChannel <- -1
+		}(idx, filename)
+	}
+
+	if <-doneChannel {
 		close(streamChannel)
+		close(fileCountChannel)
+		close(doneChannel)
 	}
 }
 
@@ -71,7 +78,7 @@ func streamFile(filename string, streamChannel chan *pb.FetchResponse) {
 		}
 
 		hash.Write(buffer[:bytesRead])
-		fileChunkResponse := &pb.FetchResponse{
+		fileChunkResponse := pb.FetchResponse{
 			Name:  filename,
 			Size:  fileSize,
 			Data:  buffer[:bytesRead],
@@ -82,7 +89,7 @@ func streamFile(filename string, streamChannel chan *pb.FetchResponse) {
 			fileChunkResponse.Md5 = hex.EncodeToString(hash.Sum(nil))
 		}
 
-		streamChannel <- fileChunkResponse
+		streamChannel <- &fileChunkResponse
 	}
 }
 

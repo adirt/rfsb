@@ -44,9 +44,9 @@ func NewServer() (*rfsbServer, error) {
 	return &rfsbServer{browser: browser, fetcher: fetcher}, nil
 }
 
-func (s *rfsbServer) Serve() error {
+func (this *rfsbServer) Serve() error {
 	grpcServer := grpc.NewServer()
-	pb.RegisterRemoteFileSystemBrowserServer(grpcServer, s)
+	pb.RegisterRemoteFileSystemBrowserServer(grpcServer, this)
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return errors.New("failed to listen: " + err.Error())
@@ -57,31 +57,48 @@ func (s *rfsbServer) Serve() error {
 	return nil
 }
 
-func (s *rfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
+func (this *rfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
 	log.Printf("Received browse request for %s", request.Dir)
-	response, err := s.browser.HandleRequest(request)
+	response, err := this.browser.HandleRequest(request)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (s *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
+func (this *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
 	log.Printf("Received fetch request")
+	fileCount := 0
 	streamChannel := make(chan *pb.FetchResponse)
-	go s.fetcher.HandleRequest(request, streamChannel)
-	for fileChunk := range streamChannel {
-		fmt.Println("Got response!")
-		fmt.Println("Name:", fileChunk.Name)
-		fmt.Println("Size:", fileChunk.Size)
-		fmt.Println("Part:", fileChunk.Part)
-		fmt.Println("Total parts:", fileChunk.Parts)
-		fmt.Println("MD5:", fileChunk.Md5)
-		fmt.Println("Length of Data:", len(fileChunk.Data))
-		fmt.Println("Data:", fileChunk.Data)
-		if err := stream.Send(fileChunk); err != nil {
-			return err
+	fileCountChannel := make(chan int)
+	doneChannel := make(chan bool, 1)
+
+	go this.fetcher.HandleRequest(request, streamChannel, fileCountChannel, doneChannel)
+	for {
+		select {
+		case fileCountUpdate := <-fileCountChannel:
+			fileCount += fileCountUpdate
+			if fileCount == 0 {
+				log.Printf("Done streaming requested data")
+				doneChannel <- true
+				return nil
+			}
+		case fileChunk := <-streamChannel:
+			printChunkInfo(fileChunk)
+			if err := stream.Send(fileChunk); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
+}
+
+func printChunkInfo(fileChunk *pb.FetchResponse) {
+	fmt.Println("Got response!")
+	fmt.Println("Name:", fileChunk.Name)
+	fmt.Println("Size:", fileChunk.Size)
+	fmt.Println("Part:", fileChunk.Part)
+	fmt.Println("Total parts:", fileChunk.Parts)
+	fmt.Println("MD5:", fileChunk.Md5)
+	fmt.Println("Length of Data:", len(fileChunk.Data))
+	fmt.Println("Data:", fileChunk.Data)
 }
