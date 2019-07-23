@@ -7,11 +7,8 @@ import (
 )
 
 func main() {
-	rfsbServer, err := server.NewServer()
-	if err != nil {
-		log.Fatalf("failed to initialize server: %v", err)
-	}
-	if err = rfsbServer.Serve(); err != nil {
+	rfsbServer := server.RfsbServer{}
+	if err := rfsbServer.Serve(); err != nil {
 		log.Fatalf(err.Error())
 	}
 }

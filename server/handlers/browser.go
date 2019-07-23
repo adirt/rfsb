@@ -2,48 +2,27 @@
 package handlers
 
 import (
-	"errors"
-	"fmt"
 	pb "github.com/adirt/rfsb/protos"
-	"io/ioutil"
-	"path"
+	"log"
 )
 
 type Browser struct {
 	*rpcHandler
 }
 
-func CreateBrowser() (*Browser, error) {
-	browser := &Browser{}
-	var err error
-	if browser.rpcHandler, err = createRpcHandler(); err != nil {
+func NewBrowser() (*Browser, error) {
+	rh, err := newRpcHandler()
+	if err != nil {
 		return nil, err
 	}
-	return browser, nil
+	return &Browser{rpcHandler: rh}, nil
 }
 
-func (b *Browser) HandleRequest(request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
-	if dirExists, err := b.pathExists(request.Dir, DIR); err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to validate request dir '%s': %v", request.Dir, err))
-	} else if !dirExists {
-		return nil, errors.New(fmt.Sprintf("request dir '%s' doesn't exist", request.Dir))
-	}
-
-	requestDirAbsPath := path.Join(b.rootDir, request.Dir)
-	dirList, err := ioutil.ReadDir(requestDirAbsPath)
+func (this *Browser) HandleRequest(request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
+	subdirs, filenames, err := this.dirContents(request.Dir)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to read request dir '%s': %v", request.Dir, err))
+		log.Printf(err.Error())
+		return nil, err
 	}
-
-	dirs := make([]string, 0, len(dirList))
-	filenames := make([]string, 0, len(dirList))
-	for _, item := range dirList {
-		if item.IsDir() {
-			dirs = append(dirs, item.Name())
-		} else {
-			filenames = append(filenames, item.Name())
-		}
-	}
-
-	return &pb.BrowseResponse{Dirs: dirs, Filenames: filenames}, nil
+	return &pb.BrowseResponse{Dirs: subdirs, Filenames: filenames}, nil
 }

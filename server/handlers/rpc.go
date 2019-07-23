@@ -4,9 +4,11 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/user"
-	pathpkg "path"
+	"path"
+	"strings"
 )
 
 type resourceType int
@@ -20,13 +22,13 @@ type rpcHandler struct {
 	rootDir string
 }
 
-func createRpcHandler() (*rpcHandler, error) {
+func newRpcHandler() (*rpcHandler, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, errors.New("failed to get home directory: " + err.Error())
 	}
 
-	rh := &rpcHandler{}
+	rh := rpcHandler{}
 	if exists, err := rh.pathExists(currentUser.HomeDir, DIR); err != nil {
 		return nil, errors.New(fmt.Sprintf("failed to validate root dir '%s'", currentUser.HomeDir))
 	} else if !exists {
@@ -34,11 +36,11 @@ func createRpcHandler() (*rpcHandler, error) {
 	}
 
 	rh.rootDir = currentUser.HomeDir
-	return rh, nil
+	return &rh, nil
 }
 
-func (rh *rpcHandler) pathExists(path string, resourceType resourceType) (bool, error) {
-	absolutePath := pathpkg.Join(rh.rootDir, path)
+func (this *rpcHandler) pathExists(item string, resourceType resourceType) (bool, error) {
+	absolutePath := this.absolutePath(item)
 	stat, err := os.Stat(absolutePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -54,4 +56,38 @@ func (rh *rpcHandler) pathExists(path string, resourceType resourceType) (bool, 
 	}
 
 	return true, nil
+}
+
+func (this *rpcHandler) dirContents(dir string) (subdirs []string, filenames []string, err error) {
+	exists, err := this.pathExists(dir, DIR)
+	if !exists {
+		if err != nil {
+			err = errors.New(fmt.Sprintf("failed to read dir '%s': %s", dir, err.Error()))
+			return
+		} else {
+			err = errors.New(fmt.Sprintf("dir not found: '%s'", dir))
+			return
+		}
+	}
+	dirList, err := ioutil.ReadDir(this.absolutePath(dir))
+	if err != nil {
+		err = errors.New(fmt.Sprintf("failed to list contents of '%s': %s", dir, err.Error()))
+		return
+	}
+
+	for _, item := range dirList {
+		if item.IsDir() {
+			subdirs = append(subdirs, item.Name())
+		} else {
+			filenames = append(filenames, item.Name())
+		}
+	}
+	return subdirs, filenames, nil
+}
+
+func (this *rpcHandler) absolutePath(item string) string {
+	if strings.HasPrefix(item, this.rootDir) {
+		return item
+	}
+	return path.Join(this.rootDir, item)
 }

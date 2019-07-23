@@ -16,35 +16,9 @@ const (
 	port = 50051
 )
 
-type rfsbServer struct {
-	browser *handlers.Browser
-	fetcher *handlers.Fetcher
-}
+type RfsbServer struct {}
 
-// type pbMessage interface {
-// 	Reset()
-// 	String() string
-// 	ProtoMessage()
-// 	Descriptor()
-// }
-
-// type requestHandler interface {
-// 	HandleRequest() *pbMessage
-// }
-
-func NewServer() (*rfsbServer, error) {
-	browser, err := handlers.CreateBrowser()
-	if err != nil {
-		log.Fatalf("failed to initialize browse handler: %v", err)
-	}
-	fetcher, err := handlers.CreateFetcher()
-	if err != nil {
-		log.Fatalf("failed to initialize fetch handler: %v", err)
-	}
-	return &rfsbServer{browser: browser, fetcher: fetcher}, nil
-}
-
-func (this *rfsbServer) Serve() error {
+func (this *RfsbServer) Serve() error {
 	grpcServer := grpc.NewServer()
 	pb.RegisterRemoteFileSystemBrowserServer(grpcServer, this)
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -57,35 +31,44 @@ func (this *rfsbServer) Serve() error {
 	return nil
 }
 
-func (this *rfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
+func (this *RfsbServer) Browse(ctx context.Context, request *pb.BrowseRequest) (*pb.BrowseResponse, error) {
 	log.Printf("Received browse request for %s", request.Dir)
-	response, err := this.browser.HandleRequest(request)
+
+	browser, err := handlers.NewBrowser()
+	if err != nil {
+		log.Fatalf("failed to initialize browse handler: %s", err.Error())
+	}
+
+	response, err := browser.HandleRequest(request)
 	if err != nil {
 		return nil, err
 	}
 	return response, nil
 }
 
-func (this *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
+func (this *RfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSystemBrowser_FetchServer) error {
 	log.Printf("Received fetch request")
-	fileCount := 0
-	streamChannel := make(chan *pb.FetchResponse)
-	fileCountChannel := make(chan int)
-	doneChannel := make(chan bool, 1)
 
-	go this.fetcher.HandleRequest(request, streamChannel, fileCountChannel, doneChannel)
+	fetcher, err := handlers.NewFetcher()
+	if err != nil {
+		log.Fatalf("failed to initialize fetch handler: %s", err.Error())
+	}
+	defer fetcher.CloseChannels()
+
+	fileCount := 0
+	go fetcher.HandleRequest(request)
 	for {
 		select {
-		case fileCountUpdate := <-fileCountChannel:
+		case fileCountUpdate := <-fetcher.FileCountChannel():
 			fileCount += fileCountUpdate
 			if fileCount == 0 {
 				log.Printf("Done streaming requested data")
-				doneChannel <- true
 				return nil
 			}
-		case fileChunk := <-streamChannel:
+		case fileChunk := <-fetcher.StreamChannel():
 			printChunkInfo(fileChunk)
 			if err := stream.Send(fileChunk); err != nil {
+				log.Printf("failed to stream requested data at '%s' part %d: %s", fileChunk.Name, fileChunk.Part, err.Error())
 				return err
 			}
 		}
@@ -93,6 +76,7 @@ func (this *rfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSyst
 }
 
 func printChunkInfo(fileChunk *pb.FetchResponse) {
+	// for debugging purposes only
 	fmt.Println("Got response!")
 	fmt.Println("Name:", fileChunk.Name)
 	fmt.Println("Size:", fileChunk.Size)
