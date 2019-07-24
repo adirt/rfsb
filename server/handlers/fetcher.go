@@ -7,6 +7,7 @@ import (
 	pb "github.com/adirt/rfsb/protos"
 	"log"
 	"os"
+	"path"
 )
 
 const (
@@ -17,7 +18,7 @@ type chunkBuffer [chunkSize]byte
 
 type Fetcher struct {
 	*rpcHandler
-	streamChannel chan *pb.FetchResponse
+	streamChannel    chan *pb.FetchResponse
 	fileCountChannel chan int
 }
 
@@ -27,60 +28,62 @@ func NewFetcher() (*Fetcher, error) {
 		return nil, err
 	}
 	return &Fetcher{
-		rpcHandler: rh,
-		streamChannel: make(chan *pb.FetchResponse),
+		rpcHandler:       rh,
+		streamChannel:    make(chan *pb.FetchResponse),
 		fileCountChannel: make(chan int),
 	}, nil
 }
 
 func (this *Fetcher) HandleRequest(request *pb.FetchRequest) {
 	this.fileCountChannel <- len(request.Filenames)
-	this.recursiveStreamDirs(request.Dirs)
-	this.streamFiles(request.Filenames)
+	this.recursiveStreamDirs(request.Dirs, "")
+	this.streamFiles(request.Filenames, "")
 }
 
-func (this *Fetcher) recursiveStreamDirs(dirs []string) {
+func (this *Fetcher) recursiveStreamDirs(dirs []string, currentDir string) {
 	for _, dir := range dirs {
 		go func(dir string) {
 			log.Printf("Reading directory '%s'", dir)
-			subdirs, filenames, err := this.dirContents(dir)
+			dirPath := path.Join(currentDir, dir)
+			subdirs, filenames, err := this.dirContents(dirPath)
 			if err != nil {
-                log.Printf(err.Error())
-                return
+				log.Printf(err.Error())
+				return
 			}
 			this.fileCountChannel <- len(filenames)
-			this.recursiveStreamDirs(subdirs)
-			this.streamFiles(filenames)
+			this.recursiveStreamDirs(subdirs, dirPath)
+			this.streamFiles(filenames, dirPath)
 		}(dir)
 	}
 }
 
-func (this *Fetcher) streamFiles(filenames []string) {
+func (this *Fetcher) streamFiles(filenames []string, dirPath string) {
 	for _, filename := range filenames {
 		go func(filename string) {
 			log.Printf("Reading file '%s'", filename)
-			if exists, err := this.pathExists(filename, FILE); !exists {
+			filePath := path.Join(dirPath, filename)
+			if exists, err := this.pathExists(filePath, FILE); !exists {
 				this.fileCountChannel <- -1
 				if err != nil {
-					log.Printf("can't process '%s': %s", filename, err.Error())
+					log.Printf("can't process '%s': %s", filePath, err.Error())
 					return
 					// TODO: Proper logging and error handling everywhere
 				} else {
-					log.Printf("file not found: '%s'", filename)
+					log.Printf("file not found: '%s'", filePath)
 					return
 				}
 			}
 
-			this.streamFile(filename)
+			this.streamFile(filePath)
 			this.fileCountChannel <- -1
 		}(filename)
 	}
 }
 
-func (this *Fetcher) streamFile(filename string) {
-	file, fileSize, err := this.prepareFile(filename)
+func (this *Fetcher) streamFile(filePath string) {
+	file, fileSize, err := this.prepareFile(filePath)
 	if err != nil {
-		log.Printf("failed to open file '%s': %s", filename, err.Error())
+		log.Printf("failed to open file '%s': %s", filePath, err.Error())
 		return
 	}
 	defer file.Close()
@@ -91,13 +94,13 @@ func (this *Fetcher) streamFile(filename string) {
 		var buffer chunkBuffer
 		bytesRead, err := file.Read(buffer[:])
 		if err != nil {
-			log.Printf("failed to read chunk %d of '%s': %s", chunkIdx, filename, err.Error())
+			log.Printf("failed to read chunk %d of '%s': %s", chunkIdx, filePath, err.Error())
 			return
 		}
 
 		hash.Write(buffer[:bytesRead])
 		fileChunkResponse := pb.FetchResponse{
-			Name:  filename,
+			Name:  filePath,
 			Size:  fileSize,
 			Data:  buffer[:bytesRead],
 			Part:  chunkIdx,
@@ -111,14 +114,14 @@ func (this *Fetcher) streamFile(filename string) {
 	}
 }
 
-func (this *Fetcher) prepareFile(filename string) (file *os.File, fileSize uint64, err error) {
-	filePath := this.absolutePath(filename)
-	fileInfo, err := os.Stat(filePath)
+func (this *Fetcher) prepareFile(filePath string) (file *os.File, fileSize uint64, err error) {
+	fileAbsPath := this.absolutePath(filePath)
+	fileInfo, err := os.Stat(fileAbsPath)
 	if err != nil {
 		return
 	}
 	fileSize = uint64(fileInfo.Size())
-	file, err = os.Open(filePath)
+	file, err = os.Open(fileAbsPath)
 	return
 }
 

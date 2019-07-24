@@ -16,7 +16,7 @@ const (
 	port = 50051
 )
 
-type RfsbServer struct {}
+type RfsbServer struct{}
 
 func (this *RfsbServer) Serve() error {
 	grpcServer := grpc.NewServer()
@@ -77,12 +77,13 @@ func (this *RfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSyst
 
 func printChunkInfo(fileChunk *pb.FetchResponse) {
 	// for debugging purposes only
-	fmt.Println("Got response!")
+	fmt.Println("====================================================")
 	fmt.Println("Name:", fileChunk.Name)
 	fmt.Println("Size:", fileChunk.Size)
 	fmt.Println("Part:", fileChunk.Part)
 	fmt.Println("Total parts:", fileChunk.Parts)
 	fmt.Println("MD5:", fileChunk.Md5)
 	fmt.Println("Length of Data:", len(fileChunk.Data))
-	fmt.Println("Data:", fileChunk.Data)
+	fmt.Println("====================================================")
+	// fmt.Println("Data:", fileChunk.Data)
 }
