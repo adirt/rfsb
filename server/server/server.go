@@ -2,6 +2,7 @@
 package server
 
 import (
+	"code.cloudfoundry.org/bytefmt"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"net"
+	"time"
 )
 
 const (
@@ -53,26 +55,35 @@ func (this *RfsbServer) Fetch(request *pb.FetchRequest, stream pb.RemoteFileSyst
 	if err != nil {
 		log.Fatalf("failed to initialize fetch handler: %s", err.Error())
 	}
-	defer fetcher.CloseChannels()
 
-	fileCount := 0
+	var ( // fetch stats
+		chunkCount  = uint64(0)
+		fileCount   = uint64(0)
+		totalSize   = uint64(0)
+		timeStart   = time.Now()
+		timeEnd     time.Time
+		timeElapsed time.Duration
+	)
+
 	go fetcher.HandleRequest(request)
-	for {
-		select {
-		case fileCountUpdate := <-fetcher.FileCountChannel():
-			fileCount += fileCountUpdate
-			if fileCount == 0 {
-				log.Printf("Done streaming requested data")
-				return nil
-			}
-		case fileChunk := <-fetcher.StreamChannel():
-			printChunkInfo(fileChunk)
-			if err := stream.Send(fileChunk); err != nil {
-				log.Printf("failed to stream requested data at '%s' part %d: %s", fileChunk.Name, fileChunk.Part, err.Error())
-				return err
-			}
+	for fileChunk := range fetcher.StreamChannel() {
+		printChunkInfo(fileChunk)
+		if err := stream.Send(fileChunk); err != nil {
+			log.Printf("failed to stream requested data at '%s' part %d: %s", fileChunk.Name, fileChunk.Part, err.Error())
+			return err
+		}
+
+		chunkCount++
+		totalSize += uint64(len(fileChunk.Data))
+		if fileChunk.Part == fileChunk.Parts {
+			fileCount++
 		}
 	}
+
+	timeEnd = time.Now()
+	timeElapsed = timeEnd.Sub(timeStart)
+	log.Printf("Transferred %d chunks, %d files, total size %s in %s", chunkCount, fileCount, bytefmt.ByteSize(totalSize), timeElapsed)
+	return nil
 }
 
 func printChunkInfo(fileChunk *pb.FetchResponse) {
